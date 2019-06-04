@@ -9,13 +9,10 @@ import org.apache.hadoop.hbase.ServerName;
 import org.junit.experimental.categories.Category;
 
 import java.io.IOException;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 @Category(SmallTests.class)
-public class TestHeteroneousBalancerBalance extends HeteroneousTestBase {
+public class TestHeterogeneousBalancerBalance extends HeterogeneousTestBase {
 
     @Test
     public void testNulls() throws IOException {
@@ -56,6 +53,17 @@ public class TestHeteroneousBalancerBalance extends HeteroneousTestBase {
 
         testBalance(clusterState, 18);
     }
+
+    @Test
+    public void testTwentyServers() throws IOException {
+        createSimpleRulesFile(Arrays.asList("srv[0-9] 200", "srv1[0-9] 50"));
+
+        Map<ServerName, List<HRegionInfo>> clusterState = createHomongousClusterState(20, 60);
+
+        // server10 to 19 needs to move 36 regions each, to could go from 120.00001% to 46.0% of usage
+        testBalance(clusterState, 360);
+    }
+
 
     @Test
     public void testTwoServersAndOneEmpty() throws IOException {
@@ -138,4 +146,5 @@ public class TestHeteroneousBalancerBalance extends HeteroneousTestBase {
 
         testBalance(clusterState, 2);
     }
+
 }

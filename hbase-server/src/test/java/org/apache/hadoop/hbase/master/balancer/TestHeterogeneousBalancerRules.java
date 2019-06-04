@@ -11,7 +11,7 @@ import java.util.Arrays;
 import java.util.Collections;
 
 @Category(SmallTests.class)
-public class TestHeteroneousBalancerRules extends HeteroneousTestBase {
+public class TestHeterogeneousBalancerRules extends HeterogeneousTestBase {
     @Test
     public void testNoRules() throws IOException {
         cleanup();

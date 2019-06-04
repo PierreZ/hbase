@@ -20,18 +20,20 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 /**
- * Class used to be the base of unit tests on Heteroneous load balancers. It contains methods to
+ * Class used to be the base of unit tests on Heterogeneous load balancers. It contains methods to
  * generate rules, region-servers, regions, and so on
  */
-public class HeteroneousTestBase {
+public class HeterogeneousTestBase {
     protected static Random rand = new Random();
 
     private static final String DEFAULT_RULES_TMP_LOCATION = "/tmp/hbase-balancer.rules";
-    static HeteroneousBalancer loadBalancer;
+    static HeterogeneousBalancer loadBalancer;
     static Configuration conf;
     private int regionId = 0;
     private static final ServerName master = ServerName.valueOf("fake-master", 0, 1L);
@@ -40,8 +42,8 @@ public class HeteroneousTestBase {
     public static void beforeAllTests() throws Exception {
         createSimpleRulesFile(new ArrayList<String>());
         conf = HBaseConfiguration.create();
-        loadBalancer = new HeteroneousBalancer();
-        conf.set(HeteroneousBalancer.HBASE_MASTER_BALANCER_HETERONEOUS_RULES_FILE, DEFAULT_RULES_TMP_LOCATION);
+        loadBalancer = new HeterogeneousBalancer();
+        conf.set(HeterogeneousBalancer.HBASE_MASTER_BALANCER_HETEROGENEOUS_RULES_FILE, DEFAULT_RULES_TMP_LOCATION);
         loadBalancer.setConf(conf);
         loadBalancer.initialize();
         RegionLocationFinder regionFinder = new RegionLocationFinder();
@@ -51,6 +53,18 @@ public class HeteroneousTestBase {
         Mockito.when(st.getServerName()).thenReturn(master);
         loadBalancer.setMasterServices(st);
 
+    }
+
+    Map<ServerName, List<HRegionInfo>> createHomongousClusterState(int nbrServers, int nbrRegionsPerRS) {
+        Map<ServerName, List<HRegionInfo>> clusterState = new HashMap<ServerName, List<HRegionInfo>>();
+
+        for (int i = 0; i < nbrServers; i++) {
+            ServerName server = randomServer("srv" + i).getServerName();
+            List<HRegionInfo> regionsOnServer = randomRegions(nbrRegionsPerRS);
+            clusterState.put(server, regionsOnServer);
+        }
+
+        return clusterState;
     }
 
     static void createSimpleRulesFile(List<String> lines) throws IOException {
@@ -154,5 +168,77 @@ public class HeteroneousTestBase {
             regions.add(hri);
         }
         return regions;
+    }
+
+    protected List<ServerAndLoad> randomServers(int numServers, int numRegionsPerServer) {
+        List<ServerAndLoad> servers = new ArrayList<ServerAndLoad>(numServers);
+        for (int i = 0; i < numServers; i++) {
+            servers.add(randomServer("srv" + i, numRegionsPerServer));
+        }
+        return servers;
+    }
+
+    protected ServerAndLoad randomServer(final String host, final int numRegionsPerServer) {
+        if (!this.serverQueue.isEmpty()) {
+            ServerName sn = this.serverQueue.poll();
+            return new ServerAndLoad(sn, numRegionsPerServer);
+        }
+        int port = rand.nextInt(60000);
+        long startCode = rand.nextLong();
+        ServerName sn = ServerName.valueOf(host, port, startCode);
+        return new ServerAndLoad(sn, numRegionsPerServer);
+    }
+
+    List<ServerName> getListOfServerNames(final List<ServerAndLoad> sals) {
+        List<ServerName> list = new ArrayList<ServerName>();
+        for (ServerAndLoad e : sals) {
+            list.add(e.getServerName());
+        }
+        return list;
+    }
+
+    /**
+     * Asserts a valid retained assignment plan.
+     * <p>
+     * Must meet the following conditions:
+     * <ul>
+     * <li>Every input region has an assignment, and to an online server
+     * <li>If a region had an existing assignment to a server with the same
+     * address a a currently online server, it will be assigned to it
+     * </ul>
+     * @param existing
+     * @param servers
+     * @param assignment
+     */
+    void assertRetainedAssignment(Map<HRegionInfo, ServerName> existing,
+                                  List<ServerName> servers, Map<ServerName, List<HRegionInfo>> assignment) {
+        // Verify condition 1, every region assigned, and to online server
+        Set<ServerName> onlineServerSet = new TreeSet<ServerName>(servers);
+        Set<HRegionInfo> assignedRegions = new TreeSet<HRegionInfo>();
+        for (Map.Entry<ServerName, List<HRegionInfo>> a : assignment.entrySet()) {
+            assertTrue("Region assigned to server that was not listed as online",
+                    onlineServerSet.contains(a.getKey()));
+            assignedRegions.addAll(a.getValue());
+        }
+        assertEquals(existing.size(), assignedRegions.size());
+
+        // Verify condition 2, if server had existing assignment, must have same
+        Set<String> onlineHostNames = new TreeSet<String>();
+        for (ServerName s : servers) {
+            onlineHostNames.add(s.getHostname());
+        }
+
+        for (Map.Entry<ServerName, List<HRegionInfo>> a : assignment.entrySet()) {
+            ServerName assignedTo = a.getKey();
+            for (HRegionInfo r : a.getValue()) {
+                ServerName address = existing.get(r);
+                if (address != null && onlineHostNames.contains(address.getHostname())) {
+                    // this region was prevously assigned somewhere, and that
+                    // host is still around, then it should be re-assigned on the
+                    // same host
+                    assertEquals(address.getHostname(), assignedTo.getHostname());
+                }
+            }
+        }
     }
 }

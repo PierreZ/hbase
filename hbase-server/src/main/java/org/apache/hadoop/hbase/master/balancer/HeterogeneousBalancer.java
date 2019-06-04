@@ -4,50 +4,60 @@ import java.io.BufferedReader;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collections;
+import java.util.*;
+
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+
 import java.util.Map.Entry;
-import java.util.Random;
 import java.util.concurrent.ExecutionException;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.ClusterStatus;
-import org.apache.hadoop.hbase.HBaseIOException;
-import org.apache.hadoop.hbase.HRegionInfo;
-import org.apache.hadoop.hbase.ServerName;
-import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.*;
 import org.apache.hadoop.hbase.master.LoadBalancer;
 import org.apache.hadoop.hbase.master.MasterServices;
+import org.apache.hadoop.hbase.master.RackManager;
 import org.apache.hadoop.hbase.master.RegionPlan;
 import org.apache.hadoop.hbase.util.Pair;
 
-public class HeteroneousBalancer implements LoadBalancer {
+/**
+ * This balancer is quite different that the @StochasticBalancer used generally.
+ * It is useful when the HBase clusters is runned over RegionServers which have
+ * diferent capacity, i.e. they can hold only a number of regions because of their hardware.
+ *
+ * This allow to run HBase clusters with different hardware for RegionServer in parallel.
+ *
+ * We can rule a tuple composed of:
+ *      * an regexp to match the hostname
+ *      * a value, which is the limit for this ServerName
+ *
+ * This rules are loaded from a file, one rule per line.
+ *
+ * This balancer is not working yet with:
+ *      * region replica
+ *      * region on master
+ */
+public class HeterogeneousBalancer implements LoadBalancer {
 
 
     /**
      * configuration used for the path where the rule file is stored
      */
-    static final String HBASE_MASTER_BALANCER_HETERONEOUS_RULES_FILE = "hbase.master.balancer.heteroneous.rules.file";
+    static final String HBASE_MASTER_BALANCER_HETEROGENEOUS_RULES_FILE = "hbase.master.balancer.heterogeneous.rules.file";
     private String rulesPath;
 
     /**
      * Default rule to apply when the rule file is not found. Default to 200.
      */
-    private static final String HBASE_MASTER_BALANCER_HETERONEOUS_RULES_DEFAULT = "hbase.master.balancer.heteroneous.rules.default";
+    private static final String HBASE_MASTER_BALANCER_HETEROGENEOUS_RULES_DEFAULT = "hbase.master.balancer.heterogeneous.rules.default";
     private int defaultNumberOfRegions = 200;
 
     /**
      * max number of regions moveable in a single call to balance. Default is MAX_INT
      */
-    private static final String HBASE_MASTER_BALANCER_HETERONEOUS_MAX_MOVEABLE_REGIONS = "hbase.master.balancer.heteroneous.max.moveable.regions";
+    private static final String HBASE_MASTER_BALANCER_HETEROGENEOUS_MAX_MOVEABLE_REGIONS = "hbase.master.balancer.heterogeneous.max.moveable.regions";
     private int maxRegionsMoveablePerRS;
 
     /**
@@ -71,15 +81,16 @@ public class HeteroneousBalancer implements LoadBalancer {
      */
     private Map<ServerName, Integer> limitPerRS;
 
-    private static final Log LOG = LogFactory.getLog(HeteroneousBalancer.class);
+    private static final Log LOG = LogFactory.getLog(HeterogeneousBalancer.class);
     private Random rand = new Random(System.currentTimeMillis());
 
     private MasterServices masterServices;
     private RegionLocationFinder regionFinder;
     private Configuration conf;
     private ClusterStatus clusterStatus;
+    private RackManager rackManager;
 
-    public HeteroneousBalancer() {
+    public HeterogeneousBalancer() {
         limitPerRS = new HashMap<>();
         limitPerRule = new HashMap<>();
         this.regionFinder = new RegionLocationFinder();
@@ -116,8 +127,38 @@ public class HeteroneousBalancer implements LoadBalancer {
             nbrRegions += nbrRegionOnRS;
             loadPerRS.put(sn, rsLoad);
 
+            LOG.debug(sn.getHostname() + ": " + nbrRegionOnRS + "/" + limit + " regions (" + rsLoad * 100 + "%)");
+        }
+        this.avgLoadOverall = (float) nbrRegions / sumLimit;
+        LOG.info("According to current rules, cluster is full at " + this.avgLoadOverall * 100 + "% (" + nbrRegions + "/" + sumLimit + ")");
+
+    }
+
+    private void updateRegionLoad(Map<ServerName, List<HRegionInfo>> assigments, int additionalRegions) {
+        int sumLimit = 0;
+        int nbrRegions = 0;
+
+        this.nbrRegionsPerRS.clear();
+        this.limitPerRS.clear();
+        this.loadPerRS.clear();
+
+        for (Map.Entry<ServerName, List<HRegionInfo>> entry: assigments.entrySet()) {
+            ServerName sn = entry.getKey();
+
+            int nbrRegionOnRS = entry.getValue().size();
+            nbrRegionsPerRS.put(sn, nbrRegionOnRS);
+
+            int limit = findLimitForRS(sn);
+            sumLimit += limit;
+            float rsLoad = (float) nbrRegionOnRS / (float) limit;
+            nbrRegions += nbrRegionOnRS;
+            loadPerRS.put(sn, rsLoad);
+
             LOG.info(sn.getHostname() + ": " + nbrRegionOnRS + "/" + limit + " regions (" + rsLoad * 100 + "%)");
         }
+
+        nbrRegions += additionalRegions;
+
         this.avgLoadOverall = (float) nbrRegions / sumLimit;
         LOG.info("According to current rules, cluster is full at " + this.avgLoadOverall * 100 + "%");
 
@@ -128,7 +169,7 @@ public class HeteroneousBalancer implements LoadBalancer {
      * @param serverName the server we are looking for
      * @return the limit
      */
-    private int findLimitForRS(ServerName serverName) {
+    protected int findLimitForRS(ServerName serverName) {
         // checking cache first
         if (limitPerRS.containsKey(serverName)) {
             return limitPerRS.get(serverName);
@@ -346,6 +387,10 @@ public class HeteroneousBalancer implements LoadBalancer {
                     continue;
                 }
 
+                if (line.startsWith("#")) {
+                    continue;
+                }
+
                 String[] splits = line.split(" ");
                 if (splits.length != 2) {
                     throw new IOException("line '" + line + "' is malformated, expected [regexp] [limit]. Skipping line");
@@ -413,8 +458,12 @@ public class HeteroneousBalancer implements LoadBalancer {
         HashMap<ServerName, Float> futureLoad = new HashMap<>(this.loadPerRS);
 
         for (ServerName serverName: servers) {
-            futureLoad.put(serverName, 0f);
-            futureNbrOfRegions.put(serverName, 0);
+            if (!futureLoad.containsKey(serverName)) {
+                futureLoad.put(serverName, 0f);
+            }
+            if (!futureNbrOfRegions.containsKey(serverName)) {
+                futureNbrOfRegions.put(serverName, 0);
+            }
         }
 
         for (HRegionInfo region : regions) {
@@ -451,8 +500,7 @@ public class HeteroneousBalancer implements LoadBalancer {
      * retain all assignment, so in some instances initial assignment will not be
      * completely balanced.
      * <p>
-     * Any leftover regions without an existing server to be assigned to will be
-     * assigned randomly to available servers.
+     * Any leftover regions without an existing server to be assigned to will be balanced
      *
      * @param regions regions and existing assignment from meta
      * @param servers available servers
@@ -463,13 +511,27 @@ public class HeteroneousBalancer implements LoadBalancer {
                                                                List<ServerName> servers) throws HBaseIOException {
         Map<ServerName, List<HRegionInfo>> assigments = new HashMap<>();
 
+        loadRules();
+
+        // creating list of hostnames
+        Set<String> knownHostnames = new TreeSet<String>();
+        Map<String, ServerName> hostnameToServerName = new HashMap<>();
+        TreeSet<ServerName> newServers = new TreeSet<>(servers);
+        for (ServerName server: servers) {
+            knownHostnames.add(server.getHostname());
+            hostnameToServerName.put(server.getHostname(), server);
+            newServers.add(server);
+        }
+
         ArrayList<HRegionInfo> toBalance = new ArrayList<>();
 
+        int nbrRegions = 0;
         for (Map.Entry<HRegionInfo, ServerName> regionEntry: regions.entrySet()) {
             HRegionInfo region = regionEntry.getKey();
             ServerName oldServerName = regionEntry.getValue();
 
-            if (servers.contains(oldServerName)) {
+            if (knownHostnames.contains(oldServerName.getHostname())) {
+                oldServerName = hostnameToServerName.get(oldServerName.getHostname());
                 if (assigments.containsKey(oldServerName)) {
                     assigments.get(oldServerName).add(region);
                 } else {
@@ -477,14 +539,27 @@ public class HeteroneousBalancer implements LoadBalancer {
                     listOfRegions.add(region);
                     assigments.put(oldServerName, listOfRegions);
                 }
+                nbrRegions++;
             } else {
                 // Offline server, we will need to balance them
                 toBalance.add(region);
             }
         }
 
-        LOG.info(toBalance.size() + "regions with an offline server, calling roundRobinAssigment on them");
+        LOG.info("balanced " + nbrRegions + " regions across " + assigments.keySet().size() + " known servers/" + servers.size() + " alive servers");
+        for (ServerName key: assigments.keySet()) {
+            newServers.remove(key);
+        }
 
+        for (ServerName emptyServer: newServers) {
+            LOG.info("adding empty RS " + emptyServer.getHostname());
+            assigments.put(emptyServer, new ArrayList<HRegionInfo>());
+        }
+
+        LOG.info(toBalance.size() + " regions with an offline server");
+
+        // before calling roundRobinAssignment, we need to recompute the map
+        updateRegionLoad(assigments, toBalance.size());
         Map<ServerName, List<HRegionInfo>> regionsLeftAssigments = roundRobinAssignment(toBalance,
                 servers);
 
@@ -500,6 +575,8 @@ public class HeteroneousBalancer implements LoadBalancer {
         }
         return assigments;
     }
+
+
 
     Map<Pattern, Integer> getLimitPerRule() {
         return limitPerRule;
@@ -581,18 +658,19 @@ public class HeteroneousBalancer implements LoadBalancer {
 
     private void reloadConfiguration() {
         LOG.info("reloading configuration for Balancer");
-        this.rulesPath = this.conf.get(HBASE_MASTER_BALANCER_HETERONEOUS_RULES_FILE);
+        this.rulesPath = this.conf.get(HBASE_MASTER_BALANCER_HETEROGENEOUS_RULES_FILE);
 
-
-        this.defaultNumberOfRegions = this.conf.getInt(HBASE_MASTER_BALANCER_HETERONEOUS_RULES_DEFAULT, 200);
+        this.defaultNumberOfRegions = this.conf.getInt(HBASE_MASTER_BALANCER_HETEROGENEOUS_RULES_DEFAULT, 200);
         if (this.defaultNumberOfRegions < 0) {
-            LOG.warn("unvalid configuration '" + HBASE_MASTER_BALANCER_HETERONEOUS_RULES_DEFAULT + "'. Setting default");
+            LOG.warn("unvalid configuration '" + HBASE_MASTER_BALANCER_HETEROGENEOUS_RULES_DEFAULT + "'. Setting default");
         }
 
-        this.maxRegionsMoveablePerRS = this.conf.getInt(HBASE_MASTER_BALANCER_HETERONEOUS_MAX_MOVEABLE_REGIONS, Integer.MAX_VALUE);
+        this.maxRegionsMoveablePerRS = this.conf.getInt(HBASE_MASTER_BALANCER_HETEROGENEOUS_MAX_MOVEABLE_REGIONS, Integer.MAX_VALUE);
         if (this.maxRegionsMoveablePerRS < 0) {
-            LOG.warn("unvalid configuration '" + HBASE_MASTER_BALANCER_HETERONEOUS_MAX_MOVEABLE_REGIONS+ "'. Setting default");
+            LOG.warn("unvalid configuration '" + HBASE_MASTER_BALANCER_HETEROGENEOUS_MAX_MOVEABLE_REGIONS + "'. Setting default");
         }
+
+        this.rackManager = new RackManager(conf);
 
         this.loadRules();
     }
