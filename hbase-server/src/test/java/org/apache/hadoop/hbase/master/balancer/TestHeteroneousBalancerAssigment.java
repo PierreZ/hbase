@@ -8,6 +8,7 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -72,5 +73,13 @@ public class TestHeteroneousBalancerAssigment extends HeteroneousTestBase {
         total += regionsOnServerC.size();
 
         Assert.assertEquals(100, total);
+    }
+    @Test
+    public void testNullsAndEmpty() throws IOException {
+        Map<ServerName, List<HRegionInfo>> plans = loadBalancer.roundRobinAssignment(null, new ArrayList<ServerName>());
+        Assert.assertEquals(0, plans.size());
+
+        plans = loadBalancer.roundRobinAssignment(new ArrayList<HRegionInfo>(), null);
+        Assert.assertEquals(0, plans.size());
     }
 }

@@ -40,4 +40,11 @@ public class TestHeteroneousBalancerRules extends HeteroneousTestBase {
         loadBalancer.setConf(conf);
         Assert.assertEquals(2, loadBalancer.getLimitPerRule().size());
     }
+
+    @Test
+    public void testBadRegexp() throws IOException {
+        createSimpleRulesFile(Arrays.asList("server[ 1"));
+        loadBalancer.setConf(conf);
+        Assert.assertEquals(0, loadBalancer.getLimitPerRule().size());
+    }
 }

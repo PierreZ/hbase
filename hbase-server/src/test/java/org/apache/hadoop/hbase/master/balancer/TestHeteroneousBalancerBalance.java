@@ -1,6 +1,8 @@
 package org.apache.hadoop.hbase.master.balancer;
 
+import org.apache.hadoop.hbase.master.RegionPlan;
 import org.apache.hadoop.hbase.testclassification.SmallTests;
+import org.junit.Assert;
 import org.junit.Test;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.ServerName;
@@ -14,6 +16,13 @@ import java.util.Map;
 
 @Category(SmallTests.class)
 public class TestHeteroneousBalancerBalance extends HeteroneousTestBase {
+
+    @Test
+    public void testNulls() throws IOException {
+        List<RegionPlan> plans = loadBalancer.balanceCluster(null);
+        Assert.assertEquals(0, plans.size());
+    }
+
     @Test
     public void testTwoServersAndOneOverloaded() throws IOException {
 
@@ -28,7 +37,6 @@ public class TestHeteroneousBalancerBalance extends HeteroneousTestBase {
 
         testBalance(clusterState, 2);
     }
-
 
     @Test
     public void testThreeServersAndOneEmpty() throws IOException {
@@ -102,6 +110,22 @@ public class TestHeteroneousBalancerBalance extends HeteroneousTestBase {
     @Test
     public void testSlightlyOverloaded() throws IOException {
         createSimpleRulesFile(Arrays.asList("srv1 100", "srv2 100"));
+
+        // mock cluster State
+        Map<ServerName, List<HRegionInfo>> clusterState = new HashMap<ServerName, List<HRegionInfo>>();
+        ServerName serverA = randomServer("srv1").getServerName();
+        ServerName serverB = randomServer("srv2").getServerName();
+        List<HRegionInfo> regionsOnServerA = randomRegions(102);
+        List<HRegionInfo> regionsOnServerB = randomRegions(97);
+        clusterState.put(serverA, regionsOnServerA);
+        clusterState.put(serverB, regionsOnServerB);
+
+        testBalance(clusterState, 2);
+    }
+
+    @Test
+    public void testWildcardRegexp() throws IOException {
+        createSimpleRulesFile(Arrays.asList(".* 100"));
 
         // mock cluster State
         Map<ServerName, List<HRegionInfo>> clusterState = new HashMap<ServerName, List<HRegionInfo>>();

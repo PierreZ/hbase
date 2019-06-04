@@ -16,6 +16,8 @@ import java.util.Map.Entry;
 import java.util.Random;
 import java.util.concurrent.ExecutionException;
 import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.ClusterStatus;
 import org.apache.hadoop.hbase.HBaseIOException;
@@ -167,6 +169,11 @@ public class HeteroneousBalancer implements LoadBalancer {
     public List<RegionPlan> balanceCluster(Map<ServerName, List<HRegionInfo>> clusterState)
             throws HBaseIOException {
 
+        List<RegionPlan> regionPlans = new ArrayList<>();
+        if (null == clusterState) {
+         return regionPlans;
+        }
+
         loadRules();
 
         LOG.info("starting balancer");
@@ -174,7 +181,6 @@ public class HeteroneousBalancer implements LoadBalancer {
         HashMap<ServerName, Integer> futureNbrOfRegions = new HashMap<>(this.nbrRegionsPerRS);
         HashMap<ServerName, Float> futureLoad = new HashMap<>(this.loadPerRS);
 
-        List<RegionPlan> regionPlans = new ArrayList<>();
 
         for (Map.Entry<ServerName, List<HRegionInfo>> entry : clusterState.entrySet()) {
             int limit = findLimitForRS(entry.getKey());
@@ -185,7 +191,7 @@ public class HeteroneousBalancer implements LoadBalancer {
                 LOG.info(entry.getKey().getHostname() + " has a too much load(" + rsLoad + ">" + avgLoadOverall + ")");
 
                 // we have more regions than expected, moving some
-                int nbrRegionsToMove = estimateNumberOfRegionsToMove(entry.getKey(), futureLoad, futureNbrOfRegions);
+                int nbrRegionsToMove = estimateNumberOfRegionsToMove(entry.getKey(), futureNbrOfRegions);
                 List<HRegionInfo> regionsToMove = chooseRegionsToMove(entry.getKey(), entry.getValue(), nbrRegionsToMove);
 
                 int regionsMoved = 0;
@@ -213,6 +219,9 @@ public class HeteroneousBalancer implements LoadBalancer {
         return regionPlans;
     }
 
+    /**
+     * Choose regions to move, based on data locality
+     */
     private List<HRegionInfo> chooseRegionsToMove(final ServerName serverName, List<HRegionInfo> regionInfos, int nbrRegionsToMove) {
 
         Collections.sort(regionInfos, new Comparator<HRegionInfo>() {
@@ -237,14 +246,16 @@ public class HeteroneousBalancer implements LoadBalancer {
         return regionInfos.subList(0, nbrRegionsToMove);
     }
 
-    private Pair<HRegionInfo, ServerName> recomputeMaps(HashMap<ServerName, Integer> futureNbrOfRegions, HashMap<ServerName, Float> futureLoad, ServerName source, Pair<HRegionInfo, ServerName>  pair ) {
+    /**
+     * as we are going through the modification, we need to recompute the map used as a temporary source of thruth
+     */
+    private void recomputeMaps(HashMap<ServerName, Integer> futureNbrOfRegions, HashMap<ServerName, Float> futureLoad, ServerName source, Pair<HRegionInfo, ServerName>  pair ) {
 
         if (null != source) {
             recomputeMaps(futureNbrOfRegions, futureLoad, source, -1);
         }
         recomputeMaps(futureNbrOfRegions, futureLoad, pair.getSecond(), +1);
 
-        return pair;
     }
 
     private void recomputeMaps(HashMap<ServerName, Integer> futureNbrOfRegions, HashMap<ServerName, Float> futureLoad, ServerName serverName, int delta) {
@@ -262,6 +273,7 @@ public class HeteroneousBalancer implements LoadBalancer {
         futureLoad.put(serverName, rsLoad);
     }
 
+    // used to try to find a suitable RegionServer for the Region
     private Pair<HRegionInfo, ServerName> findPotentialRegionServer(ServerName serverName,
                                                                     HRegionInfo regionInfo,
                                                                     HashMap<ServerName, Float> futureLoad,
@@ -297,7 +309,8 @@ public class HeteroneousBalancer implements LoadBalancer {
         return new Pair<>(regionInfo, minEntry.getKey());
     }
 
-    private int estimateNumberOfRegionsToMove(ServerName serverName, HashMap<ServerName, Float> futureLoad, HashMap<ServerName, Integer> nbrOfRegions) {
+    // used to compute an estimation of how many regions we should be moving to reduce the load
+    private int estimateNumberOfRegionsToMove(ServerName serverName, HashMap<ServerName, Integer> nbrOfRegions) {
 
         int nbrRegions = nbrOfRegions.get(serverName);
         if (nbrRegions == 0) {
@@ -316,6 +329,9 @@ public class HeteroneousBalancer implements LoadBalancer {
         return i;
     }
 
+    /**
+     * used to load the rule files.
+     */
     private void loadRules() {
         List<String> lines = readFile(this.rulesPath);
         if (lines.size() == 0) {
@@ -338,8 +354,8 @@ public class HeteroneousBalancer implements LoadBalancer {
                 Pattern pattern = Pattern.compile(splits[0]);
                 Integer limit = Integer.parseInt(splits[1]);
                 this.limitPerRule.put(pattern, limit);
-            } catch (IOException | NumberFormatException e) {
-                LOG.error(e);
+            } catch (IOException | NumberFormatException | PatternSyntaxException e) {
+                LOG.error("error on line: " + e);
             }
         }
         // cleanup cache
@@ -347,6 +363,7 @@ public class HeteroneousBalancer implements LoadBalancer {
         this.limitPerRS.clear();
     }
 
+    // used to read the rule files
     private List<String> readFile(String filename) {
         List<String> records = new ArrayList<String>();
         try	{
@@ -377,9 +394,21 @@ public class HeteroneousBalancer implements LoadBalancer {
     public Map<ServerName, List<HRegionInfo>> roundRobinAssignment(List<HRegionInfo> regions,
                                                                    List<ServerName> servers) throws HBaseIOException {
 
-        LOG.info("called roundrobin");
-
         Map<ServerName, List<HRegionInfo>> assigments = new HashMap<>();
+        if (null == servers || null == regions) {
+            return assigments;
+        }
+
+        if (servers.size() == 0) {
+            LOG.warn("tried to assign regions but no online servers, skipping");
+            return assigments;
+        }
+
+        if (regions.size() == 0) {
+            LOG.warn("no regions to assign, skipping");
+            return assigments;
+        }
+
         HashMap<ServerName, Integer> futureNbrOfRegions = new HashMap<>(this.nbrRegionsPerRS);
         HashMap<ServerName, Float> futureLoad = new HashMap<>(this.loadPerRS);
 
