@@ -18,19 +18,11 @@
 package org.apache.hadoop.hbase.master.balancer;
 
 import com.google.common.annotations.VisibleForTesting;
-import java.util.ArrayDeque;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Deque;
-import java.util.HashMap;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Map.Entry;
-import java.util.Random;
 
+import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
+import java.util.*;
+import java.util.Map.Entry;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.classification.InterfaceAudience;
@@ -103,6 +95,8 @@ import com.google.common.base.Optional;
   justification="Complaint is about costFunctions not being synchronized; not end of the world")
 public class StochasticLoadBalancer extends BaseLoadBalancer {
 
+  protected static final String CUSTOM_COST_FUNCTIONS_KEY =
+          "hbase.master.balancer.stochastic.customCostFunctions";
   protected static final String STEPS_PER_REGION_KEY =
       "hbase.master.balancer.stochastic.stepsPerRegion";
   protected static final String MAX_STEPS_KEY =
@@ -203,20 +197,42 @@ public class StochasticLoadBalancer extends BaseLoadBalancer {
     regionReplicaHostCostFunction = new RegionReplicaHostCostFunction(conf);
     regionReplicaRackCostFunction = new RegionReplicaRackCostFunction(conf);
 
-    costFunctions = new CostFunction[]{
-      new RegionCountSkewCostFunction(conf),
-      new PrimaryRegionCountSkewCostFunction(conf),
-      new MoveCostFunction(conf),
-      localityCost,
-      rackLocalityCost,
-      new TableSkewCostFunction(conf),
-      regionReplicaHostCostFunction,
-      regionReplicaRackCostFunction,
-      regionLoadFunctions[0],
-      regionLoadFunctions[1],
-      regionLoadFunctions[2],
-      regionLoadFunctions[3],
-    };
+    // loading custom functions
+    CostFunction customCostFunction = null;
+    if (conf.get(CUSTOM_COST_FUNCTIONS_KEY).length() > 0) {
+
+      Class<? extends CostFunction> customFunctionName = conf.getClass(CUSTOM_COST_FUNCTIONS_KEY, null, CostFunction.class);
+      if (customFunctionName != null) {
+        try {
+          Constructor<? extends CostFunction> costFunctionConstructor = customFunctionName.getConstructor(Configuration.class);
+          customCostFunction = costFunctionConstructor.newInstance(conf);
+        } catch (IllegalAccessException | InstantiationException | InvocationTargetException | NoSuchMethodException e) {
+          LOG.error("cannot load custom cost function, skipping: ", e);
+        }
+      }
+    }
+
+
+    int numberOfCostFunctions = customCostFunction == null ? 12: 13;
+
+    costFunctions = new CostFunction[numberOfCostFunctions];
+    costFunctions[0] = new RegionCountSkewCostFunction(conf);
+    costFunctions[1] = new PrimaryRegionCountSkewCostFunction(conf);
+    costFunctions[2] = new MoveCostFunction(conf);
+    costFunctions[3] = localityCost;
+    costFunctions[4] = rackLocalityCost;
+    costFunctions[5] = new TableSkewCostFunction(conf);
+    costFunctions[6] = regionReplicaHostCostFunction;
+    costFunctions[7] = regionReplicaRackCostFunction;
+    costFunctions[8] = regionLoadFunctions[0];
+    costFunctions[9] = regionLoadFunctions[1];
+    costFunctions[10] = regionLoadFunctions[2];
+    costFunctions[11] = regionLoadFunctions[3];
+
+    if (customCostFunction != null) {
+      costFunctions[12] = customCostFunction;
+    }
+
 
     curFunctionCosts= new Double[costFunctions.length];
     tempFunctionCosts= new Double[costFunctions.length];
@@ -984,7 +1000,7 @@ public class StochasticLoadBalancer extends BaseLoadBalancer {
   /**
    * Base class of StochasticLoadBalancer's Cost Functions.
    */
-  abstract static class CostFunction {
+  public abstract static class CostFunction {
 
     private float multiplier = 0;
 
