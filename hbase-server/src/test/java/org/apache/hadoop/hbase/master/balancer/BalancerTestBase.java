@@ -375,11 +375,20 @@ public class BalancerTestBase {
   }
 
   protected TreeMap<ServerName, List<RegionInfo>> mockClusterServers(int[] mockCluster, int numTables) {
+    return mockClusterServers(mockCluster, numTables, false);
+
+  }
+  protected TreeMap<ServerName, List<RegionInfo>> mockClusterServers(int[] mockCluster, int numTables, boolean predictibleHosts) {
     int numServers = mockCluster.length;
     TreeMap<ServerName, List<RegionInfo>> servers = new TreeMap<>();
     for (int i = 0; i < numServers; i++) {
       int numRegions = mockCluster[i];
-      ServerAndLoad sal = randomServer(0);
+      ServerAndLoad sal;
+      if (predictibleHosts) {
+        sal = randomServer("rs" + i, 0);
+      } else {
+        sal = randomServer(0);
+      }
       List<RegionInfo> regions = randomRegions(numRegions, numTables);
       servers.put(sal.getServerName(), regions);
     }
@@ -487,12 +496,18 @@ public class BalancerTestBase {
   private Queue<ServerName> serverQueue = new LinkedList<>();
 
   protected ServerAndLoad randomServer(final int numRegionsPerServer) {
+    Random rand = ThreadLocalRandom.current();
+    String host = "srv" + rand.nextInt(Integer.MAX_VALUE);
+    return randomServer(host, numRegionsPerServer);
+  }
+
+  protected ServerAndLoad randomServer(String host, final int numRegionsPerServer) {
+
     if (!this.serverQueue.isEmpty()) {
       ServerName sn = this.serverQueue.poll();
       return new ServerAndLoad(sn, numRegionsPerServer);
     }
     Random rand = ThreadLocalRandom.current();
-    String host = "srv" + rand.nextInt(Integer.MAX_VALUE);
     int port = rand.nextInt(60000);
     long startCode = rand.nextLong();
     ServerName sn = ServerName.valueOf(host, port, startCode);
@@ -522,7 +537,7 @@ public class BalancerTestBase {
       int numTables,
       boolean assertFullyBalanced, boolean assertFullyBalancedForReplicas) {
     Map<ServerName, List<RegionInfo>> serverMap =
-        createServerMap(numNodes, numRegions, numRegionsPerServer, replication, numTables);
+        createServerMap(numNodes, numRegions, numRegionsPerServer, replication, numTables, false);
     testWithCluster(serverMap, null, assertFullyBalanced, assertFullyBalancedForReplicas);
   }
 
@@ -560,7 +575,8 @@ public class BalancerTestBase {
                                                              int numRegions,
                                                              int numRegionsPerServer,
                                                              int replication,
-                                                             int numTables) {
+                                                             int numTables,
+                                                              boolean predictibleHost) {
     //construct a cluster of numNodes, having  a total of numRegions. Each RS will hold
     //numRegionsPerServer many regions except for the last one, which will host all the
     //remaining regions
@@ -569,7 +585,8 @@ public class BalancerTestBase {
       cluster[i] = numRegionsPerServer;
     }
     cluster[cluster.length - 1] = numRegions - ((cluster.length - 1) * numRegionsPerServer);
-    Map<ServerName, List<RegionInfo>> clusterState = mockClusterServers(cluster, numTables);
+
+    Map<ServerName, List<RegionInfo>> clusterState = mockClusterServers(cluster, numTables, predictibleHost);
     if (replication > 0) {
       // replicate the regions to the same servers
       for (List<RegionInfo> regions : clusterState.values()) {

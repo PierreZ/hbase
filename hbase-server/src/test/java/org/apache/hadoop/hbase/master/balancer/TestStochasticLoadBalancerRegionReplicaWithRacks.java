@@ -62,7 +62,7 @@ public class TestStochasticLoadBalancerRegionReplicaWithRacks extends BalancerTe
     int numTables = 10;
     int numRacks = 4; // all replicas should be on a different rack
     Map<ServerName, List<RegionInfo>> serverMap =
-        createServerMap(numNodes, numRegions, numRegionsPerServer, replication, numTables);
+        createServerMap(numNodes, numRegions, numRegionsPerServer, replication, numTables, false);
     RackManager rm = new ForTestRackManager(numRacks);
 
     testWithCluster(serverMap, rm, false, true);

@@ -436,7 +436,7 @@ public class TestStochasticLoadBalancer extends BalancerTestBase {
     int numTables = 2;
 
     Map<ServerName, List<RegionInfo>> serverMap =
-        createServerMap(numNodes, numRegions, numRegionsPerServer, replication, numTables);
+        createServerMap(numNodes, numRegions, numRegionsPerServer, replication, numTables, false);
     List<ServerAndLoad> list = convertToList(serverMap);
 
 
