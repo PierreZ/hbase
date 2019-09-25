@@ -111,22 +111,22 @@ import org.apache.hbase.thirdparty.com.google.common.collect.Lists;
  */
 @InterfaceAudience.LimitedPrivate(HBaseInterfaceAudience.CONFIG)
 @edu.umd.cs.findbugs.annotations.SuppressWarnings(value="IS2_INCONSISTENT_SYNC",
-  justification="Complaint is about costFunctions not being synchronized; not end of the world")
+        justification="Complaint is about costFunctions not being synchronized")
 public class StochasticLoadBalancer extends BaseLoadBalancer {
 
   protected static final String STEPS_PER_REGION_KEY =
-      "hbase.master.balancer.stochastic.stepsPerRegion";
+          "hbase.master.balancer.stochastic.stepsPerRegion";
   protected static final String MAX_STEPS_KEY =
-      "hbase.master.balancer.stochastic.maxSteps";
+          "hbase.master.balancer.stochastic.maxSteps";
   protected static final String RUN_MAX_STEPS_KEY =
-      "hbase.master.balancer.stochastic.runMaxSteps";
+          "hbase.master.balancer.stochastic.runMaxSteps";
   protected static final String MAX_RUNNING_TIME_KEY =
-      "hbase.master.balancer.stochastic.maxRunningTime";
+          "hbase.master.balancer.stochastic.maxRunningTime";
   protected static final String KEEP_REGION_LOADS =
-      "hbase.master.balancer.stochastic.numRegionLoadsToRemember";
+          "hbase.master.balancer.stochastic.numRegionLoadsToRemember";
   private static final String TABLE_FUNCTION_SEP = "_";
   protected static final String MIN_COST_NEED_BALANCE_KEY =
-      "hbase.master.balancer.stochastic.minCostNeedBalance";
+          "hbase.master.balancer.stochastic.minCostNeedBalance";
   protected static final String COST_FUNCTIONS_COST_FUNCTIONS_KEY =
           "hbase.master.balancer.stochastic.additionalCostFunctions";
 
@@ -200,11 +200,11 @@ public class StochasticLoadBalancer extends BaseLoadBalancer {
       candidateGenerators.add(new RegionReplicaRackCandidateGenerator());
     }
     regionLoadFunctions = new CostFromRegionLoadFunction[] {
-      new ReadRequestCostFunction(conf),
-      new CPRequestCostFunction(conf),
-      new WriteRequestCostFunction(conf),
-      new MemStoreSizeCostFunction(conf),
-      new StoreFileCostFunction(conf)
+         new ReadRequestCostFunction(conf),
+         new CPRequestCostFunction(conf),
+         new WriteRequestCostFunction(conf),
+         new MemStoreSizeCostFunction(conf),
+         new StoreFileCostFunction(conf)
     };
     regionReplicaHostCostFunction = new RegionReplicaHostCostFunction(conf);
     regionReplicaRackCostFunction = new RegionReplicaRackCostFunction(conf);
@@ -295,7 +295,7 @@ public class StochasticLoadBalancer extends BaseLoadBalancer {
    */
   public void updateMetricsSize(int size) {
     if (metricsBalancer instanceof MetricsStochasticBalancer) {
-        ((MetricsStochasticBalancer) metricsBalancer).updateMetricsSize(size);
+      ((MetricsStochasticBalancer) metricsBalancer).updateMetricsSize(size);
     }
   }
 
@@ -322,7 +322,7 @@ public class StochasticLoadBalancer extends BaseLoadBalancer {
     if (cs.getNumServers() < MIN_SERVER_BALANCE) {
       if (LOG.isDebugEnabled()) {
         LOG.debug("Not running balancer because only " + cs.getNumServers()
-            + " active regionserver(s)");
+                + " active regionserver(s)");
       }
       return false;
     }
@@ -346,7 +346,7 @@ public class StochasticLoadBalancer extends BaseLoadBalancer {
     }
 
     if (total <= 0 || sumMultiplier <= 0
-        || (sumMultiplier > 0 && (total / sumMultiplier) < minCostNeedBalance)) {
+            || (sumMultiplier > 0 && (total / sumMultiplier) < minCostNeedBalance)) {
       if (LOG.isTraceEnabled()) {
         final String loadBalanceTarget =
             isByTable ? String.format("table (%s)", tableName) : "cluster";
@@ -361,7 +361,7 @@ public class StochasticLoadBalancer extends BaseLoadBalancer {
 
   @Override
   public synchronized List<RegionPlan> balanceCluster(TableName tableName, Map<ServerName,
-    List<RegionInfo>> clusterState) {
+          List<RegionInfo>> clusterState) {
     this.tableName = tableName;
     return balanceCluster(clusterState);
   }
@@ -378,7 +378,7 @@ public class StochasticLoadBalancer extends BaseLoadBalancer {
    */
   @Override
   public synchronized List<RegionPlan> balanceCluster(Map<ServerName,
-    List<RegionInfo>> clusterState) {
+          List<RegionInfo>> clusterState) {
     List<RegionPlan> plans = balanceMasterRegions(clusterState);
     if (plans != null || clusterState == null || clusterState.size() <= 1) {
       return plans;
@@ -398,7 +398,7 @@ public class StochasticLoadBalancer extends BaseLoadBalancer {
     // be used in any computations.
     RegionLocationFinder finder = null;
     if ((this.localityCost != null && this.localityCost.getMultiplier() > 0)
-        || (this.rackLocalityCost != null && this.rackLocalityCost.getMultiplier() > 0)) {
+            || (this.rackLocalityCost != null && this.rackLocalityCost.getMultiplier() > 0)) {
       finder = this.regionFinder;
     }
 
@@ -426,21 +426,22 @@ public class StochasticLoadBalancer extends BaseLoadBalancer {
     long computedMaxSteps;
     if (runMaxSteps) {
       computedMaxSteps = Math.max(this.maxSteps,
-          ((long)cluster.numRegions * (long)this.stepsPerRegion * (long)cluster.numServers));
+              ((long)cluster.numRegions * (long)this.stepsPerRegion * (long)cluster.numServers));
     } else {
       long calculatedMaxSteps = (long)cluster.numRegions * (long)this.stepsPerRegion *
-          (long)cluster.numServers;
+              (long)cluster.numServers;
       computedMaxSteps = Math.min(this.maxSteps, calculatedMaxSteps);
       if (calculatedMaxSteps > maxSteps) {
         LOG.warn("calculatedMaxSteps:{} for loadbalancer's stochastic walk is larger than "
-            + "maxSteps:{}. Hence load balancing may not work well. Setting parameter "
-            + "\"hbase.master.balancer.stochastic.runMaxSteps\" to true can overcome this issue."
-            + "(This config change does not require service restart)", calculatedMaxSteps,
-            maxSteps);
+                        + "maxSteps:{}. Hence load balancing may not work well. Setting parameter "
+                        + "\"hbase.master.balancer.stochastic.runMaxSteps\" to true can overcome" +
+                        " this issue.(This config change does not require service restart)",
+                calculatedMaxSteps,
+                maxSteps);
       }
     }
     LOG.info("start StochasticLoadBalancer.balancer, initCost=" + currentCost + ", functionCost="
-        + functionCost() + " computedMaxSteps: " + computedMaxSteps);
+            + functionCost() + " computedMaxSteps: " + computedMaxSteps);
 
     // Perform a stochastic walk to see if we can get a good fit.
     long step;
@@ -475,7 +476,7 @@ public class StochasticLoadBalancer extends BaseLoadBalancer {
       }
 
       if (EnvironmentEdgeManager.currentTime() - startTime >
-          maxRunningTime) {
+              maxRunningTime) {
         break;
       }
     }
@@ -488,15 +489,15 @@ public class StochasticLoadBalancer extends BaseLoadBalancer {
     if (initCost > currentCost) {
       plans = createRegionPlans(cluster);
       LOG.info("Finished computing new load balance plan. Computation took {}" +
-        " to try {} different iterations.  Found a solution that moves " +
-        "{} regions; Going from a computed cost of {}" +
-        " to a new cost of {}", java.time.Duration.ofMillis(endTime - startTime),
-        step, plans.size(), initCost, currentCost);
+                      " to try {} different iterations.  Found a solution that moves " +
+                      "{} regions; Going from a computed cost of {}" +
+                      " to a new cost of {}", java.time.Duration.ofMillis(endTime - startTime),
+              step, plans.size(), initCost, currentCost);
       return plans;
     }
     LOG.info("Could not find a better load balance plan.  Tried {} different configurations in " +
-      "{}, and did not find anything with a computed cost less than {}", step,
-      java.time.Duration.ofMillis(endTime - startTime), initCost);
+                    "{}, and did not find anything with a computed cost less than {}", step,
+            java.time.Duration.ofMillis(endTime - startTime), initCost);
     return null;
   }
 
@@ -511,7 +512,7 @@ public class StochasticLoadBalancer extends BaseLoadBalancer {
       MetricsStochasticBalancer balancer = (MetricsStochasticBalancer) metricsBalancer;
       // overall cost
       balancer.updateStochasticCost(tableName.getNameAsString(),
-        "Overall", "Overall cost", overall);
+              "Overall", "Overall cost", overall);
 
       // each cost function
       for (int i = 0; i < costFunctions.size(); i++) {
@@ -520,7 +521,7 @@ public class StochasticLoadBalancer extends BaseLoadBalancer {
         Double costPercent = (overall == 0) ? 0 : (subCosts[i] / overall);
         // TODO: cost function may need a specific description
         balancer.updateStochasticCost(tableName.getNameAsString(), costFunctionName,
-          "The percent of " + costFunctionName, costPercent);
+                "The percent of " + costFunctionName, costPercent);
       }
     }
   }
@@ -559,7 +560,7 @@ public class StochasticLoadBalancer extends BaseLoadBalancer {
 
         if (LOG.isTraceEnabled()) {
           LOG.trace("Moving Region " + region.getEncodedName() + " from server "
-              + initialServer.getHostname() + " to " + newServer.getHostname());
+                  + initialServer.getHostname() + " to " + newServer.getHostname());
         }
         RegionPlan rp = new RegionPlan(region, initialServer, newServer);
         plans.add(rp);
@@ -723,8 +724,8 @@ public class StochasticLoadBalancer extends BaseLoadBalancer {
     }
 
     protected Cluster.Action pickRandomRegions(Cluster cluster,
-                                                       int thisServer,
-                                                       int otherServer) {
+                                               int thisServer,
+                                               int otherServer) {
       if (thisServer < 0 || otherServer < 0) {
         return Cluster.NullAction;
       }
@@ -744,13 +745,13 @@ public class StochasticLoadBalancer extends BaseLoadBalancer {
     }
 
     protected Cluster.Action getAction(int fromServer, int fromRegion,
-        int toServer, int toRegion) {
+                                       int toServer, int toRegion) {
       if (fromServer < 0 || toServer < 0) {
         return Cluster.NullAction;
       }
       if (fromRegion > 0 && toRegion > 0) {
         return new Cluster.SwapRegionsAction(fromServer, fromRegion,
-          toServer, toRegion);
+                toServer, toRegion);
       } else if (fromRegion > 0) {
         return new Cluster.MoveRegionAction(fromRegion, fromServer, toServer);
       } else if (toRegion > 0) {
@@ -847,10 +848,10 @@ public class StochasticLoadBalancer extends BaseLoadBalancer {
         int currentServer = cluster.regionIndexToServerIndex[region];
         if (currentServer != cluster.getOrComputeRegionsToMostLocalEntities(LocalityType.SERVER)[region]) {
           Optional<Action> potential = tryMoveOrSwap(
-              cluster,
-              currentServer,
-              region,
-              cluster.getOrComputeRegionsToMostLocalEntities(LocalityType.SERVER)[region]
+                  cluster,
+                  currentServer,
+                  region,
+                  cluster.getOrComputeRegionsToMostLocalEntities(LocalityType.SERVER)[region]
           );
           if (potential.isPresent()) {
             return potential.get();
@@ -875,11 +876,13 @@ public class StochasticLoadBalancer extends BaseLoadBalancer {
 
       // Compare locality gain/loss from swapping fromRegion with regions on toServer
       double fromRegionLocalityDelta =
-          getWeightedLocality(cluster, fromRegion, toServer) - getWeightedLocality(cluster, fromRegion, fromServer);
+              getWeightedLocality(cluster, fromRegion, toServer)
+                      - getWeightedLocality(cluster, fromRegion, fromServer);
       for (int toRegionIndex : getRandomIterationOrder(cluster.regionsPerServer[toServer].length)) {
         int toRegion = cluster.regionsPerServer[toServer][toRegionIndex];
         double toRegionLocalityDelta =
-            getWeightedLocality(cluster, toRegion, fromServer) - getWeightedLocality(cluster, toRegion, toServer);
+                getWeightedLocality(cluster, toRegion, fromServer)
+                        - getWeightedLocality(cluster, toRegion, toServer);
         // If locality would remain neutral or improve, attempt the swap
         if (fromRegionLocalityDelta + toRegionLocalityDelta >= 0) {
           return Optional.of(getAction(fromServer, fromRegion, toServer, toRegion));
@@ -916,7 +919,7 @@ public class StochasticLoadBalancer extends BaseLoadBalancer {
      * @return a regionIndex for the selected primary or -1 if there is no co-locating
      */
     int selectCoHostedRegionPerGroup(int[] primariesOfRegionsPerGroup, int[] regionsPerGroup
-        , int[] regionIndexToPrimaryIndex) {
+            , int[] regionIndexToPrimaryIndex) {
       int currentPrimary = -1;
       int currentPrimaryIndex = -1;
       int selectedPrimaryIndex = -1;
@@ -926,7 +929,7 @@ public class StochasticLoadBalancer extends BaseLoadBalancer {
       // are co-hosted
       for (int j = 0; j <= primariesOfRegionsPerGroup.length; j++) {
         int primary = j < primariesOfRegionsPerGroup.length
-            ? primariesOfRegionsPerGroup[j] : -1;
+                ? primariesOfRegionsPerGroup[j] : -1;
         if (primary != currentPrimary) { // check for whether we see a new primary
           int numReplicas = j - currentPrimaryIndex;
           if (numReplicas > 1) { // means consecutive primaries, indicating co-location
@@ -966,9 +969,9 @@ public class StochasticLoadBalancer extends BaseLoadBalancer {
       }
 
       int regionIndex = selectCoHostedRegionPerGroup(
-        cluster.primariesOfRegionsPerServer[serverIndex],
-        cluster.regionsPerServer[serverIndex],
-        cluster.regionIndexToPrimaryIndex);
+              cluster.primariesOfRegionsPerServer[serverIndex],
+              cluster.regionsPerServer[serverIndex],
+              cluster.regionIndexToPrimaryIndex);
 
       // if there are no pairs of region replicas co-hosted, default to random generator
       if (regionIndex == -1) {
@@ -995,9 +998,9 @@ public class StochasticLoadBalancer extends BaseLoadBalancer {
       }
 
       int regionIndex = selectCoHostedRegionPerGroup(
-        cluster.primariesOfRegionsPerRack[rackIndex],
-        cluster.regionsPerRack[rackIndex],
-        cluster.regionIndexToPrimaryIndex);
+              cluster.primariesOfRegionsPerRack[rackIndex],
+              cluster.regionsPerRack[rackIndex],
+              cluster.regionIndexToPrimaryIndex);
 
       // if there are no pairs of region replicas co-hosted, default to random generator
       if (regionIndex == -1) {
@@ -1051,22 +1054,22 @@ public class StochasticLoadBalancer extends BaseLoadBalancer {
      * that this action is performed on. */
     void postAction(Action action) {
       switch (action.type) {
-      case NULL: break;
-      case ASSIGN_REGION:
-        AssignRegionAction ar = (AssignRegionAction) action;
-        regionMoved(ar.region, -1, ar.server);
-        break;
-      case MOVE_REGION:
-        MoveRegionAction mra = (MoveRegionAction) action;
-        regionMoved(mra.region, mra.fromServer, mra.toServer);
-        break;
-      case SWAP_REGIONS:
-        SwapRegionsAction a = (SwapRegionsAction) action;
-        regionMoved(a.fromRegion, a.fromServer, a.toServer);
-        regionMoved(a.toRegion, a.toServer, a.fromServer);
-        break;
-      default:
-        throw new RuntimeException("Uknown action:" + action.type);
+        case NULL: break;
+        case ASSIGN_REGION:
+          AssignRegionAction ar = (AssignRegionAction) action;
+          regionMoved(ar.region, -1, ar.server);
+          break;
+        case MOVE_REGION:
+          MoveRegionAction mra = (MoveRegionAction) action;
+          regionMoved(mra.region, mra.fromServer, mra.toServer);
+          break;
+        case SWAP_REGIONS:
+          SwapRegionsAction a = (SwapRegionsAction) action;
+          regionMoved(a.fromRegion, a.fromServer, a.toServer);
+          regionMoved(a.toRegion, a.toServer, a.fromServer);
+          break;
+        default:
+          throw new RuntimeException("Uknown action:" + action.type);
       }
     }
 
@@ -1152,7 +1155,7 @@ public class StochasticLoadBalancer extends BaseLoadBalancer {
   static class MoveCostFunction extends CostFunction {
     private static final String MOVE_COST_KEY = "hbase.master.balancer.stochastic.moveCost";
     private static final String MAX_MOVES_PERCENT_KEY =
-        "hbase.master.balancer.stochastic.maxMovePercent";
+            "hbase.master.balancer.stochastic.maxMovePercent";
     private static final float DEFAULT_MOVE_COST = 7;
     private static final int DEFAULT_MAX_MOVES = 600;
     private static final float DEFAULT_MAX_MOVE_PERCENT = 0.25f;
@@ -1173,7 +1176,7 @@ public class StochasticLoadBalancer extends BaseLoadBalancer {
     protected double cost() {
       // Try and size the max number of Moves, but always be prepared to move some.
       int maxMoves = Math.max((int) (cluster.numRegions * maxMovesPercent),
-          DEFAULT_MAX_MOVES);
+              DEFAULT_MAX_MOVES);
 
       double moveCost = cluster.numMovedRegions;
 
@@ -1192,9 +1195,9 @@ public class StochasticLoadBalancer extends BaseLoadBalancer {
    * regions on a cluster.
    */
   static class RegionCountSkewCostFunction extends CostFunction {
-    private static final String REGION_COUNT_SKEW_COST_KEY =
-        "hbase.master.balancer.stochastic.regionCountCost";
-    private static final float DEFAULT_REGION_COUNT_SKEW_COST = 500;
+    static final String REGION_COUNT_SKEW_COST_KEY =
+            "hbase.master.balancer.stochastic.regionCountCost";
+    static final float DEFAULT_REGION_COUNT_SKEW_COST = 500;
 
     private double[] stats = null;
 
@@ -1224,7 +1227,7 @@ public class StochasticLoadBalancer extends BaseLoadBalancer {
    */
   static class PrimaryRegionCountSkewCostFunction extends CostFunction {
     private static final String PRIMARY_REGION_COUNT_SKEW_COST_KEY =
-        "hbase.master.balancer.stochastic.primaryRegionCountCost";
+            "hbase.master.balancer.stochastic.primaryRegionCountCost";
     private static final float DEFAULT_PRIMARY_REGION_COUNT_SKEW_COST = 500;
 
     private double[] stats = null;
@@ -1233,7 +1236,7 @@ public class StochasticLoadBalancer extends BaseLoadBalancer {
       super(conf);
       // Load multiplier should be the greatest as primary regions serve majority of reads/writes.
       this.setMultiplier(conf.getFloat(PRIMARY_REGION_COUNT_SKEW_COST_KEY,
-        DEFAULT_PRIMARY_REGION_COUNT_SKEW_COST));
+              DEFAULT_PRIMARY_REGION_COUNT_SKEW_COST));
     }
 
     @Override
@@ -1265,7 +1268,7 @@ public class StochasticLoadBalancer extends BaseLoadBalancer {
   static class TableSkewCostFunction extends CostFunction {
 
     private static final String TABLE_SKEW_COST_KEY =
-        "hbase.master.balancer.stochastic.tableSkewCost";
+            "hbase.master.balancer.stochastic.tableSkewCost";
     private static final float DEFAULT_TABLE_SKEW_COST = 35;
 
     TableSkewCostFunction(Configuration conf) {
@@ -1346,12 +1349,15 @@ public class StochasticLoadBalancer extends BaseLoadBalancer {
 
     @Override
     protected void regionMoved(int region, int oldServer, int newServer) {
-      int oldEntity = type == LocalityType.SERVER ? oldServer : cluster.serverIndexToRackIndex[oldServer];
-      int newEntity = type == LocalityType.SERVER ? newServer : cluster.serverIndexToRackIndex[newServer];
+      int oldEntity = type == LocalityType.SERVER ?
+              oldServer : cluster.serverIndexToRackIndex[oldServer];
+      int newEntity = type == LocalityType.SERVER ?
+              newServer : cluster.serverIndexToRackIndex[newServer];
       if (this.services == null) {
         return;
       }
-      double localityDelta = getWeightedLocality(region, newEntity) - getWeightedLocality(region, oldEntity);
+      double localityDelta = getWeightedLocality(region, newEntity)
+              - getWeightedLocality(region, oldEntity);
       double normalizedDelta = bestLocality == 0 ? 0.0 : localityDelta / bestLocality;
       locality += normalizedDelta;
     }
@@ -1378,11 +1384,11 @@ public class StochasticLoadBalancer extends BaseLoadBalancer {
 
     ServerLocalityCostFunction(Configuration conf, MasterServices srv) {
       super(
-          conf,
-          srv,
-          LocalityType.SERVER,
-          LOCALITY_COST_KEY,
-          DEFAULT_LOCALITY_COST
+              conf,
+              srv,
+              LocalityType.SERVER,
+              LOCALITY_COST_KEY,
+              DEFAULT_LOCALITY_COST
       );
     }
 
@@ -1394,16 +1400,17 @@ public class StochasticLoadBalancer extends BaseLoadBalancer {
 
   static class RackLocalityCostFunction extends LocalityBasedCostFunction {
 
-    private static final String RACK_LOCALITY_COST_KEY = "hbase.master.balancer.stochastic.rackLocalityCost";
+    private static final String RACK_LOCALITY_COST_KEY =
+            "hbase.master.balancer.stochastic.rackLocalityCost";
     private static final float DEFAULT_RACK_LOCALITY_COST = 15;
 
     public RackLocalityCostFunction(Configuration conf, MasterServices services) {
       super(
-          conf,
-          services,
-          LocalityType.RACK,
-          RACK_LOCALITY_COST_KEY,
-          DEFAULT_RACK_LOCALITY_COST
+              conf,
+              services,
+              LocalityType.RACK,
+              RACK_LOCALITY_COST_KEY,
+              DEFAULT_RACK_LOCALITY_COST
       );
     }
 
@@ -1514,7 +1521,7 @@ public class StochasticLoadBalancer extends BaseLoadBalancer {
   static class ReadRequestCostFunction extends CostFromRegionLoadAsRateFunction {
 
     private static final String READ_REQUEST_COST_KEY =
-        "hbase.master.balancer.stochastic.readRequestCost";
+            "hbase.master.balancer.stochastic.readRequestCost";
     private static final float DEFAULT_READ_REQUEST_COST = 5;
 
     ReadRequestCostFunction(Configuration conf) {
@@ -1536,7 +1543,7 @@ public class StochasticLoadBalancer extends BaseLoadBalancer {
   static class CPRequestCostFunction extends CostFromRegionLoadAsRateFunction {
 
     private static final String CP_REQUEST_COST_KEY =
-        "hbase.master.balancer.stochastic.cpRequestCost";
+            "hbase.master.balancer.stochastic.cpRequestCost";
     private static final float DEFAULT_CP_REQUEST_COST = 5;
 
     CPRequestCostFunction(Configuration conf) {
@@ -1557,7 +1564,7 @@ public class StochasticLoadBalancer extends BaseLoadBalancer {
   static class WriteRequestCostFunction extends CostFromRegionLoadAsRateFunction {
 
     private static final String WRITE_REQUEST_COST_KEY =
-        "hbase.master.balancer.stochastic.writeRequestCost";
+            "hbase.master.balancer.stochastic.writeRequestCost";
     private static final float DEFAULT_WRITE_REQUEST_COST = 5;
 
     WriteRequestCostFunction(Configuration conf) {
@@ -1579,7 +1586,7 @@ public class StochasticLoadBalancer extends BaseLoadBalancer {
    */
   static class RegionReplicaHostCostFunction extends CostFunction {
     private static final String REGION_REPLICA_HOST_COST_KEY =
-        "hbase.master.balancer.stochastic.regionReplicaHostCostKey";
+            "hbase.master.balancer.stochastic.regionReplicaHostCostKey";
     private static final float DEFAULT_REGION_REPLICA_HOST_COST_KEY = 100000;
 
     long maxCost = 0;
@@ -1589,7 +1596,7 @@ public class StochasticLoadBalancer extends BaseLoadBalancer {
     public RegionReplicaHostCostFunction(Configuration conf) {
       super(conf);
       this.setMultiplier(conf.getFloat(REGION_REPLICA_HOST_COST_KEY,
-        DEFAULT_REGION_REPLICA_HOST_COST_KEY));
+              DEFAULT_REGION_REPLICA_HOST_COST_KEY));
     }
 
     @Override
@@ -1599,8 +1606,8 @@ public class StochasticLoadBalancer extends BaseLoadBalancer {
       maxCost = cluster.numHosts > 1 ? getMaxCost(cluster) : 0;
       costsPerGroup = new long[cluster.numHosts];
       primariesOfRegionsPerGroup = cluster.multiServersPerHost // either server based or host based
-          ? cluster.primariesOfRegionsPerHost
-          : cluster.primariesOfRegionsPerServer;
+              ? cluster.primariesOfRegionsPerHost
+              : cluster.primariesOfRegionsPerServer;
       for (int i = 0 ; i < primariesOfRegionsPerGroup.length; i++) {
         costsPerGroup[i] = costPerGroup(primariesOfRegionsPerGroup[i]);
       }
@@ -1613,7 +1620,7 @@ public class StochasticLoadBalancer extends BaseLoadBalancer {
       // max cost is the case where every region replica is hosted together regardless of host
       int[] primariesOfRegions = new int[cluster.numRegions];
       System.arraycopy(cluster.regionIndexToPrimaryIndex, 0, primariesOfRegions, 0,
-          cluster.regions.length);
+              cluster.regions.length);
 
       Arrays.sort(primariesOfRegions);
 
@@ -1695,13 +1702,13 @@ public class StochasticLoadBalancer extends BaseLoadBalancer {
    */
   static class RegionReplicaRackCostFunction extends RegionReplicaHostCostFunction {
     private static final String REGION_REPLICA_RACK_COST_KEY =
-        "hbase.master.balancer.stochastic.regionReplicaRackCostKey";
+            "hbase.master.balancer.stochastic.regionReplicaRackCostKey";
     private static final float DEFAULT_REGION_REPLICA_RACK_COST_KEY = 10000;
 
     public RegionReplicaRackCostFunction(Configuration conf) {
       super(conf);
       this.setMultiplier(conf.getFloat(REGION_REPLICA_RACK_COST_KEY,
-        DEFAULT_REGION_REPLICA_RACK_COST_KEY));
+              DEFAULT_REGION_REPLICA_RACK_COST_KEY));
     }
 
     @Override
@@ -1740,7 +1747,7 @@ public class StochasticLoadBalancer extends BaseLoadBalancer {
   static class MemStoreSizeCostFunction extends CostFromRegionLoadAsRateFunction {
 
     private static final String MEMSTORE_SIZE_COST_KEY =
-        "hbase.master.balancer.stochastic.memstoreSizeCost";
+            "hbase.master.balancer.stochastic.memstoreSizeCost";
     private static final float DEFAULT_MEMSTORE_SIZE_COST = 5;
 
     MemStoreSizeCostFunction(Configuration conf) {
@@ -1761,7 +1768,7 @@ public class StochasticLoadBalancer extends BaseLoadBalancer {
   static class StoreFileCostFunction extends CostFromRegionLoadFunction {
 
     private static final String STOREFILE_SIZE_COST_KEY =
-        "hbase.master.balancer.stochastic.storefileSizeCost";
+            "hbase.master.balancer.stochastic.storefileSizeCost";
     private static final float DEFAULT_STOREFILE_SIZE_COST = 5;
 
     StoreFileCostFunction(Configuration conf) {
